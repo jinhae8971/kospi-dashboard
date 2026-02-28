@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  html, body, #root {
+    height: 100%;
+    background-color: #0a0f1a;
+  }
+  body {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    color: #e2e8f0;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0f1623;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e2d45;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2a3f5f;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-bg-card border border-bg-border rounded-xl p-4;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium;
+  }
+  .badge-buy {
+    @apply badge bg-green-900/40 text-accent-green border border-accent-green/30;
+  }
+  .badge-sell {
+    @apply badge bg-red-900/40 text-accent-red border border-accent-red/30;
+  }
+  .badge-neutral {
+    @apply badge bg-amber-900/40 text-accent-amber border border-accent-amber/30;
+  }
+  .stat-label {
+    @apply text-xs text-slate-500 uppercase tracking-wider;
+  }
+  .stat-value {
+    @apply text-lg font-semibold font-mono;
+  }
+}
+
+/* ApexCharts dark overrides */
+.apexcharts-tooltip {
+  background: #0f1623 !important;
+  border: 1px solid #1e2d45 !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 8px !important;
+}
+.apexcharts-tooltip-title {
+  background: #162030 !important;
+  border-bottom: 1px solid #1e2d45 !important;
+  color: #00d4ff !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 11px !important;
+}
+.apexcharts-tooltip-text {
+  color: #e2e8f0 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 11px !important;
+}
+.apexcharts-xaxistooltip {
+  background: #0f1623 !important;
+  border: 1px solid #1e2d45 !important;
+  color: #e2e8f0 !important;
+}
+.apexcharts-xaxistooltip-bottom::before,
+.apexcharts-xaxistooltip-bottom::after {
+  border-bottom-color: #1e2d45 !important;
+}
+.apexcharts-gridline {
+  stroke: #1e2d45 !important;
+}
+.apexcharts-legend-text {
+  color: #94a3b8 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 11px !important;
+}
