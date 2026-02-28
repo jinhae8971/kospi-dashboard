@@ -1,6 +1,6 @@
 """
 KOSPI Strategy Dashboard - Data Fetcher
-Fetches market data and computes all technical indicators.
+Fetches market data, technical indicators, and investor supply/demand.
 Outputs to public/data/market_data.json
 """
 
@@ -139,27 +139,21 @@ def generate_signals(df):
         if pd.isna(r) or pd.isna(m):
             continue
 
-        # Strong Buy: BB lower + RSI oversold bounce
         if c <= bb_l.iloc[i] and r < 30 and r > r_prev:
             signals.append({"date": date, "type": "BUY", "reason": "BB하단+RSI과매도반등",
                             "price": safe_float(c), "strength": "STRONG"})
-        # Strong Sell: BB upper + RSI overbought drop
         elif c >= bb_u.iloc[i] and r > 70 and r < r_prev:
             signals.append({"date": date, "type": "SELL", "reason": "BB상단+RSI과매수",
                             "price": safe_float(c), "strength": "STRONG"})
-        # Moderate Buy: Golden Cross MA5/MA20
         elif m5 > m20 and m5_prev <= m20_prev:
             signals.append({"date": date, "type": "BUY", "reason": "골든크로스(MA5/MA20)",
                             "price": safe_float(c), "strength": "MODERATE"})
-        # Moderate Sell: Death Cross MA5/MA20
         elif m5 < m20 and m5_prev >= m20_prev:
             signals.append({"date": date, "type": "SELL", "reason": "데드크로스(MA5/MA20)",
                             "price": safe_float(c), "strength": "MODERATE"})
-        # Weak Buy: MACD Golden Cross
         elif m > ms and m_prev <= ms_prev:
             signals.append({"date": date, "type": "BUY", "reason": "MACD골든크로스",
                             "price": safe_float(c), "strength": "WEAK"})
-        # Weak Sell: MACD Death Cross
         elif m < ms and m_prev >= ms_prev:
             signals.append({"date": date, "type": "SELL", "reason": "MACD데드크로스",
                             "price": safe_float(c), "strength": "WEAK"})
@@ -239,7 +233,6 @@ def compute_decision(df):
     bb_range = bb_u - bb_l
     bb_pos = (close - bb_l) / bb_range if bb_range > 0 else 0.5
 
-    # Individual signals
     rsi_sig = ("OVERBOUGHT" if rsi > 70 else "BULLISH" if rsi > 60
                else "OVERSOLD" if rsi < 30 else "BEARISH" if rsi < 40 else "NEUTRAL")
     rsi_lbl = {"OVERBOUGHT": "과매수", "BULLISH": "강세", "OVERSOLD": "과매도",
@@ -328,7 +321,6 @@ def compute_correlations(kospi_df, qqq_df, sox_df, window=60, start_1y=None):
         result["current"][name] = safe_float(roll.iloc[-1])
         rolling[name] = roll
 
-    # Build rolling series for last 1Y
     if rolling:
         ref_key = list(rolling.keys())[0]
         dates = rolling[ref_key].index
@@ -340,6 +332,80 @@ def compute_correlations(kospi_df, qqq_df, sox_df, window=60, start_1y=None):
                 if d in roll.index:
                     entry[name] = safe_float(roll.loc[d])
             result["rolling60"].append(entry)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# 수급현황: 투자자별 순매수 (pykrx)
+# ---------------------------------------------------------------------------
+
+def fetch_supply_demand():
+    """코스피/코스닥 투자자별 수급 데이터 수집 (pykrx 사용)"""
+    try:
+        from pykrx import stock as krx_stock
+    except ImportError:
+        print("  [WARNING] pykrx not installed — 수급 데이터 생략")
+        return {}
+
+    result = {}
+    end_dt = datetime.now()
+    start_dt = end_dt - timedelta(days=45)   # 여유있게 45일 → 약 30 거래일
+    fromdate = start_dt.strftime("%Y%m%d")
+    todate   = end_dt.strftime("%Y%m%d")
+
+    # 투자자 컬럼명 후보 (pykrx 버전 차이 대응)
+    COL_MAP = {
+        "foreign":     ["외국인합계", "외국인", "외국인 합계"],
+        "institution": ["기관합계", "기관", "기관 합계"],
+        "individual":  ["개인"],
+    }
+
+    for market_name, market_key in [("kospi", "KOSPI"), ("kosdaq", "KOSDAQ")]:
+        try:
+            df = krx_stock.get_market_net_purchases_of_equities_by_investor(
+                fromdate, todate, market_key
+            )
+
+            if df is None or df.empty:
+                print(f"  Supply/Demand {market_key}: empty DataFrame")
+                continue
+
+            # --- 날짜 인덱스 정규화 ---
+            if not isinstance(df.index, pd.DatetimeIndex):
+                df.index = pd.to_datetime(df.index)
+
+            series = []
+            for date, row in df.iterrows():
+                entry = {"date": date.strftime("%Y-%m-%d")}
+                for key, candidates in COL_MAP.items():
+                    val = 0
+                    for col in candidates:
+                        if col in (row.index if hasattr(row, 'index') else []):
+                            v = row[col]
+                            val = int(v) if pd.notna(v) else 0
+                            break
+                    entry[key] = val
+                series.append(entry)
+
+            # 거래 있는 날만 남기기
+            series = [
+                e for e in series
+                if any(e.get(k, 0) != 0 for k in ["foreign", "institution", "individual"])
+            ]
+
+            if series:
+                result[market_name] = {
+                    "lastDate": series[-1]["date"],
+                    "latest": {k: series[-1].get(k, 0) for k in ["foreign", "institution", "individual"]},
+                    "series": series[-20:]   # 최근 20 거래일
+                }
+                print(f"  Supply/Demand {market_key}: {len(series)} days, latest={series[-1]['date']}")
+            else:
+                print(f"  Supply/Demand {market_key}: no valid rows")
+
+        except Exception as exc:
+            print(f"  Supply/Demand {market_key}: error → {exc}")
 
     return result
 
@@ -375,7 +441,7 @@ def main():
         print(f"  VKOSPI: skipped ({e})")
         vkospi = pd.DataFrame()
 
-    # ---- Indicators on full history (for proper MA-240 warmup) ----
+    # ── 기술 지표 계산 ──────────────────────────────────────
     df = kospi.copy()
     for p in [5, 20, 60, 120, 240]:
         df[f"ma{p}"] = df["Close"].rolling(p).mean()
@@ -392,11 +458,9 @@ def main():
     if not vkospi.empty:
         df["vkospi"] = vkospi["Close"].reindex(df.index, method="ffill")
 
-    # ---- Slice to 1Y ----
     df1y = df[df.index >= start_1y].copy()
     print(f"  1Y slice: {len(df1y)} rows")
 
-    # ---- Build series helper ----
     def to_list(series, key="value"):
         out = []
         for d, v in series.items():
@@ -404,7 +468,6 @@ def main():
                 out.append({"date": d.strftime("%Y-%m-%d"), key: safe_float(v)})
         return out
 
-    # ---- Assemble output ----
     ohlcv = [
         {
             "date": d.strftime("%Y-%m-%d"),
@@ -432,16 +495,16 @@ def main():
         "vkospi": to_list(df["vkospi"]) if "vkospi" in df.columns else [],
     }
 
-    signals = generate_signals(df1y)
-    metrics = compute_metrics(df1y, signals)
-    sr = find_support_resistance(df1y)
+    signals  = generate_signals(df1y)
+    metrics  = compute_metrics(df1y, signals)
+    sr       = find_support_resistance(df1y)
     decision = compute_decision(df1y)
     correlations = compute_correlations(
         df, qqq if not qqq.empty else None,
         sox if not sox.empty else None, start_1y=start_1y
     )
 
-    # Normalized performance comparison
+    # 비교 수익률
     comp = {}
     def norm(s):
         base = s.iloc[0]
@@ -450,7 +513,7 @@ def main():
     kn = norm(df1y["Close"])
     comp["kospi_normalized"] = [{"date": d.strftime("%Y-%m-%d"), "value": safe_float(v)} for d, v in kn.items()]
     comp["kospi_current"] = safe_float(df1y["Close"].iloc[-1])
-    comp["kospi_return"] = safe_float((df1y["Close"].iloc[-1] / df1y["Close"].iloc[0] - 1) * 100)
+    comp["kospi_return"]  = safe_float((df1y["Close"].iloc[-1] / df1y["Close"].iloc[0] - 1) * 100)
 
     for name, ext_df in [("qqq", qqq), ("sox", sox)]:
         if ext_df.empty:
@@ -461,13 +524,17 @@ def main():
         sn = norm(s)
         comp[f"{name}_normalized"] = [{"date": d.strftime("%Y-%m-%d"), "value": safe_float(v)} for d, v in sn.items()]
         comp[f"{name}_current"] = safe_float(s.iloc[-1])
-        comp[f"{name}_return"] = safe_float((s.iloc[-1] / s.iloc[0] - 1) * 100)
+        comp[f"{name}_return"]  = safe_float((s.iloc[-1] / s.iloc[0] - 1) * 100)
 
-    # 52-week range
+    # 52주 레인지
     hi52 = safe_float(df1y["High"].max())
     lo52 = safe_float(df1y["Low"].min())
-    cur = safe_float(df1y["Close"].iloc[-1])
+    cur  = safe_float(df1y["Close"].iloc[-1])
     pos52 = round((cur - lo52) / (hi52 - lo52) * 100, 1) if hi52 and lo52 and hi52 != lo52 else 50
+
+    # ── 수급현황 ──────────────────────────────────────────
+    print("Fetching supply/demand data (pykrx) …")
+    supply_demand = fetch_supply_demand()
 
     output = {
         "metadata": {
@@ -485,6 +552,7 @@ def main():
         "comparison": comp,
         "decisionTree": decision,
         "range52w": {"high": hi52, "low": lo52, "current": cur, "position": pos52},
+        "supplyDemand": supply_demand,
     }
 
     os.makedirs("public/data", exist_ok=True)
@@ -494,8 +562,11 @@ def main():
 
     print(f"\n[OK] {path} written ({os.path.getsize(path) // 1024} KB)")
     print(f"    Signals : {len(signals)}  (Buy: {metrics['buySignals']})")
-    print(f"    Win Rate: {metrics['winRate']:.1%}  MDD: {metrics['mdd']:.1%}  Sharpe: {metrics['sharpeRatio']:.2f}")
     print(f"    Decision: {decision['stateLabel']}  (Cash: {decision['cashRatio']}%)")
+    if supply_demand:
+        for mkt, mdata in supply_demand.items():
+            latest = mdata.get("latest", {})
+            print(f"    {mkt.upper()} 수급: 외국인={latest.get('foreign',0):,}  기관={latest.get('institution',0):,}  개인={latest.get('individual',0):,}")
 
 
 if __name__ == "__main__":
