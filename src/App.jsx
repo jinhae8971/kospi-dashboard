@@ -228,9 +228,97 @@ function SupportResistance({ decisionTree, currentPrice }) {
   )
 }
 
+// ── 수급 선형 차트 (SVG) ─────────────────────────────
+const INVESTOR_CFG = [
+  { key: 'foreign',     label: '외국인', color: '#00d4ff' },
+  { key: 'institution', label: '기관',   color: '#ffaa00' },
+  { key: 'individual',  label: '개인',   color: '#94a3b8' },
+]
+
+function fmtAmt(val) {
+  if (val == null) return '-'
+  const abs  = Math.abs(val)
+  const sign = val >= 0 ? '+' : '-'
+  if (abs >= 1_000_000_000_000) return `${sign}${(abs / 1_000_000_000_000).toFixed(1)}조`
+  if (abs >= 100_000_000)       return `${sign}${(abs / 100_000_000).toFixed(0)}억`
+  if (abs >= 10_000)            return `${sign}${(abs / 10_000).toFixed(0)}만`
+  return `${sign}${abs.toLocaleString()}`
+}
+
+function InvestorLineChart({ series }) {
+  if (!series || series.length < 2) return (
+    <div className="flex items-center justify-center h-20 text-xs text-slate-600 font-mono">
+      데이터 부족
+    </div>
+  )
+
+  const W = 400, H = 90
+  const PAD = { t: 8, r: 4, b: 16, l: 4 }
+  const w = W - PAD.l - PAD.r
+  const h = H - PAD.t - PAD.b
+
+  const allVals = series.flatMap(d => INVESTOR_CFG.map(c => d[c.key] ?? 0))
+  const minV = Math.min(...allVals, 0)
+  const maxV = Math.max(...allVals, 0)
+  const range = maxV - minV || 1
+
+  const xS = (i) => PAD.l + (i / (series.length - 1)) * w
+  const yS = (v) => PAD.t + ((maxV - v) / range) * h
+  const zeroY = yS(0)
+
+  // X축 날짜 레이블: 3개월 간격
+  const xLabels = []
+  let lastMonth = null
+  series.forEach((d, i) => {
+    const m = d.date?.slice(0, 7)
+    if (m && m !== lastMonth && i % Math.max(1, Math.floor(series.length / 5)) === 0) {
+      xLabels.push({ i, label: m.slice(2) }) // "YY-MM"
+      lastMonth = m
+    }
+  })
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+      {/* 제로라인 */}
+      <line
+        x1={PAD.l} y1={zeroY} x2={W - PAD.r} y2={zeroY}
+        stroke="#334155" strokeWidth="1" strokeDasharray="4,3"
+      />
+      {/* 각 투자자 라인 */}
+      {INVESTOR_CFG.map(({ key, color }) => {
+        const pts = series.map((d, i) => `${xS(i)},${yS(d[key] ?? 0)}`).join(' ')
+        return (
+          <polyline
+            key={key} points={pts}
+            fill="none" stroke={color}
+            strokeWidth="1.5" strokeLinejoin="round" opacity="0.9"
+          />
+        )
+      })}
+      {/* 최신 값 점 */}
+      {INVESTOR_CFG.map(({ key, color }) => {
+        const last = series[series.length - 1]
+        return (
+          <circle
+            key={key}
+            cx={xS(series.length - 1)} cy={yS(last[key] ?? 0)}
+            r="2.5" fill={color}
+          />
+        )
+      })}
+      {/* X축 날짜 */}
+      {xLabels.map(({ i, label }) => (
+        <text
+          key={i} x={xS(i)} y={H - 2}
+          fontSize="7" fill="#475569" textAnchor="middle" fontFamily="monospace"
+        >{label}</text>
+      ))}
+    </svg>
+  )
+}
+
 // ── 코스피/코스닥 수급현황 ────────────────────────────
 function SupplyDemand({ supplyDemand }) {
-  // 수급 데이터 없을 때 (첫 배포 직후 등)
   if (!supplyDemand || Object.keys(supplyDemand).length === 0) {
     return (
       <Card>
@@ -242,23 +330,6 @@ function SupplyDemand({ supplyDemand }) {
     )
   }
 
-  // 억원 단위 포맷
-  const fmtAmt = (val) => {
-    if (val == null) return '-'
-    const abs = Math.abs(val)
-    const sign = val >= 0 ? '+' : '-'
-    if (abs >= 1_000_000_000_000) return `${sign}${(abs / 1_000_000_000_000).toFixed(1)}조`
-    if (abs >= 100_000_000)       return `${sign}${(abs / 100_000_000).toFixed(0)}억`
-    if (abs >= 10_000)             return `${sign}${(abs / 10_000).toFixed(0)}만`
-    return `${sign}${abs.toLocaleString()}`
-  }
-
-  const investors = [
-    { key: 'foreign',     label: '외국인', icon: '🌏' },
-    { key: 'institution', label: '기관',   icon: '🏛' },
-    { key: 'individual',  label: '개인',   icon: '👤' },
-  ]
-
   const MarketPanel = ({ marketKey, label }) => {
     const mdata = supplyDemand[marketKey]
     if (!mdata) return (
@@ -266,91 +337,61 @@ function SupplyDemand({ supplyDemand }) {
         <p className="text-xs text-slate-600 font-mono">데이터 없음</p>
       </div>
     )
-
     const { latest, series = [], lastDate } = mdata
 
     return (
       <div>
-        {/* 마켓 헤더 */}
-        <div className="flex items-center justify-between mb-3">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-slate-300 font-mono font-bold">{label}</p>
           <p className="text-xs text-slate-600 font-mono">{lastDate} 기준</p>
         </div>
 
-        {/* 투자자별 행 */}
-        <div className="space-y-3">
-          {investors.map(({ key, label: iLabel, icon }) => {
-            const val   = latest?.[key] ?? 0
-            const isPos = val >= 0
-            const clr   = isPos ? '#00ff88' : '#ff3366'
-            const txtCls = isPos ? 'text-accent-green' : 'text-accent-red'
-
-            // 스파크바: 최근 15 거래일
-            const sparkVals = series.slice(-15).map(d => d[key] ?? 0)
-            const maxAbs    = Math.max(...sparkVals.map(Math.abs), 1)
-
+        {/* 당일 순매수 요약 */}
+        <div className="flex gap-3 mb-2">
+          {INVESTOR_CFG.map(({ key, label: lbl, color }) => {
+            const v = latest?.[key] ?? 0
             return (
-              <div key={key}>
-                {/* 레이블 + 금액 */}
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-slate-400 font-mono">{icon} {iLabel}</span>
-                  <span className={`text-sm font-bold font-mono ${txtCls}`}>{fmtAmt(val)}</span>
-                </div>
-                {/* 스파크 바차트 */}
-                <div className="flex items-end gap-px" style={{ height: '20px' }}>
-                  {sparkVals.map((v, i) => {
-                    const barH = Math.max(2, (Math.abs(v) / maxAbs) * 18)
-                    const barClr = v >= 0 ? '#00ff88' : '#ff3366'
-                    const isLast = i === sparkVals.length - 1
-                    return (
-                      <div
-                        key={i}
-                        className="flex-1 rounded-sm"
-                        style={{
-                          height: `${barH}px`,
-                          background: barClr,
-                          opacity: isLast ? 1 : 0.45,
-                          alignSelf: 'flex-end',
-                          boxShadow: isLast ? `0 0 4px ${barClr}` : 'none',
-                        }}
-                      />
-                    )
-                  })}
-                </div>
+              <div key={key} className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                <span className="text-xs text-slate-500 font-mono">{lbl}</span>
+                <span
+                  className="text-xs font-bold font-mono"
+                  style={{ color: v >= 0 ? '#00ff88' : '#ff3366' }}
+                >
+                  {fmtAmt(v)}
+                </span>
               </div>
             )
           })}
         </div>
 
-        {/* 오늘 총 합계 요약 */}
-        {latest && (
-          <div className="mt-3 pt-3 border-t border-bg-border">
-            <div className="flex justify-between text-xs font-mono">
-              {investors.map(({ key, label: iLabel }) => {
-                const v = latest[key] ?? 0
-                return (
-                  <div key={key} className="text-center">
-                    <span className="block text-slate-500">{iLabel}</span>
-                    <span className={`font-bold ${v >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
-                      {fmtAmt(v)}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+        {/* 선형 차트 */}
+        <div className="bg-bg-border/20 rounded-lg px-2 pt-1">
+          <InvestorLineChart series={series} />
+        </div>
       </div>
     )
   }
 
   return (
     <Card>
-      <SectionLabel>코스피 · 코스닥 수급현황 (투자자별 순매수)</SectionLabel>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <SectionLabel>코스피 · 코스닥 수급현황 — 투자자별 순매수 (1년)</SectionLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <MarketPanel marketKey="kospi"  label="🇰🇷 KOSPI" />
         <div className="hidden sm:block border-l border-bg-border" />
         <MarketPanel marketKey="kosdaq" label="📈 KOSDAQ" />
+      </div>
+      {/* 범례 */}
+      <div className="flex gap-4 justify-center mt-3 pt-3 border-t border-bg-border">
+        {INVESTOR_CFG.map(({ key, label, color }) => (
+          <div key={key} className="flex items-center gap-1.5">
+            <svg width="18" height="4">
+              <line x1="0" y1="2" x2="18" y2="2" stroke={color} strokeWidth="1.5" />
+            </svg>
+            <span className="text-xs font-mono" style={{ color }}>{label}</span>
+          </div>
+        ))}
       </div>
     </Card>
   )
