@@ -350,7 +350,7 @@ def fetch_supply_demand():
 
     result = {}
     end_dt = datetime.now()
-    start_dt = end_dt - timedelta(days=45)   # 여유있게 45일 → 약 30 거래일
+    start_dt = end_dt - timedelta(days=400)  # 1년치 + 여유 → 약 250 거래일
     fromdate = start_dt.strftime("%Y%m%d")
     todate   = end_dt.strftime("%Y%m%d")
 
@@ -398,7 +398,7 @@ def fetch_supply_demand():
                 result[market_name] = {
                     "lastDate": series[-1]["date"],
                     "latest": {k: series[-1].get(k, 0) for k in ["foreign", "institution", "individual"]},
-                    "series": series[-20:]   # 최근 20 거래일
+                    "series": series          # 전체 (약 250 거래일)
                 }
                 print(f"  Supply/Demand {market_key}: {len(series)} days, latest={series[-1]['date']}")
             else:
