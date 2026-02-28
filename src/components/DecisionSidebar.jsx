@@ -49,10 +49,10 @@ export default function DecisionSidebar({ decisionTree: dt, range52w, metrics })
   const stateColor = dt.color ?? COLORS.amber
 
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
       {/* ── Current State Card ─────────────────────────────────── */}
       <div
-        className="card"
+        className="card sm:col-span-2 lg:col-span-1"
         style={{ borderColor: stateColor + '55', boxShadow: `0 0 20px ${stateColor}15` }}
       >
         <div className="flex items-center justify-between mb-3">
@@ -215,7 +215,7 @@ export default function DecisionSidebar({ decisionTree: dt, range52w, metrics })
       )}
 
       {/* ── Decision Tree ─────────────────────────────────────── */}
-      <div className="card">
+      <div className="card sm:col-span-2 lg:col-span-1">
         <span className="stat-label block mb-3">전략 결정 트리</span>
         <div className="space-y-1.5 text-xs">
           {[

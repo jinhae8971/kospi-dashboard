@@ -91,6 +91,13 @@ export default function MACDChart({ ohlcv, indicators }) {
         show: true,
         markers: { width: 8, height: 8 },
       },
+      responsive: [{
+        breakpoint: 640,
+        options: {
+          chart: { height: 110, toolbar: { show: false } },
+          legend: { show: false },
+        },
+      }],
       tooltip: {
         ...APEX_BASE.tooltip,
         y: {

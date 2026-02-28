@@ -81,6 +81,12 @@ export default function RSIChart({ ohlcv, indicators }) {
         axisTicks: { show: false },
       },
       legend: { show: false },
+      responsive: [{
+        breakpoint: 640,
+        options: {
+          chart: { height: 110, toolbar: { show: false } },
+        },
+      }],
       tooltip: {
         ...APEX_BASE.tooltip,
         y: {

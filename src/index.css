@@ -9,11 +9,13 @@
   html, body, #root {
     height: 100%;
     background-color: #0a0f1a;
+    overflow-x: hidden;
   }
   body {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     color: #e2e8f0;
     -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
   }
   ::-webkit-scrollbar {
     width: 6px;

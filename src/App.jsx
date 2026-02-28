@@ -34,9 +34,9 @@ export default function App() {
         <MetricsCards metrics={metrics} signals={signals} />
 
         {/* Main layout: charts (left) + sidebar (right) */}
-        <div className="flex gap-4 items-start">
+        <div className="flex flex-col lg:flex-row gap-4 items-start">
           {/* ── Left: Chart stack ─────────────────────────────────── */}
-          <div className="flex-1 min-w-0 space-y-2">
+          <div className="flex-1 min-w-0 w-full space-y-2">
             <MainChart
               ohlcv={ohlcv}
               indicators={indicators}
@@ -49,7 +49,7 @@ export default function App() {
           </div>
 
           {/* ── Right: Decision sidebar ───────────────────────────── */}
-          <div className="w-72 xl:w-80 shrink-0">
+          <div className="w-full lg:w-72 xl:w-80 shrink-0">
             <DecisionSidebar
               decisionTree={decisionTree}
               range52w={range52w}

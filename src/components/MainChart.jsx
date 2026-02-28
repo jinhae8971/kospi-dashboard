@@ -121,6 +121,13 @@ export default function MainChart({ ohlcv, indicators, signals, supportResistanc
         points: sigPoints,
         yaxis: srLines,
       },
+      responsive: [{
+        breakpoint: 640,
+        options: {
+          chart: { height: 260, toolbar: { show: false } },
+          legend: { show: false },
+        },
+      }],
       yaxis: {
         ...APEX_BASE.yaxis,
         labels: {
@@ -165,11 +172,12 @@ export default function MainChart({ ohlcv, indicators, signals, supportResistanc
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-semibold text-slate-300">
-          KOSPI <span className="text-accent-cyan">캔들스틱</span> + 이동평균 + 볼린저밴드
+      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+        <h2 className="text-xs sm:text-sm font-semibold text-slate-300">
+          KOSPI <span className="text-accent-cyan">캔들스틱</span>
+          <span className="hidden sm:inline"> + 이동평균 + 볼린저밴드</span>
         </h2>
-        <div className="flex items-center gap-3 text-xs text-slate-500">
+        <div className="hidden sm:flex items-center gap-2 lg:gap-3 text-xs text-slate-500 flex-wrap">
           {MA_META.map(m => (
             <span key={m.key} className="flex items-center gap-1">
               <span className="inline-block w-5 h-0.5" style={{ backgroundColor: m.color }} />

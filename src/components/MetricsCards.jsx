@@ -35,7 +35,7 @@ export default function MetricsCards({ metrics, signals }) {
   const mddColor = mdd >= -0.05 ? COLORS.green : mdd >= -0.15 ? COLORS.amber : COLORS.red
 
   return (
-    <div className="flex gap-3 flex-wrap">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3">
       <Card
         label="전략 승률 (1Y)"
         value={`${(winRate * 100).toFixed(1)}%`}

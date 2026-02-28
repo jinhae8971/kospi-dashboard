@@ -78,6 +78,12 @@ export default function VolumeChart({ ohlcv, indicators }) {
         axisTicks: { color: '#1e2d45' },
       },
       legend: { show: false },
+      responsive: [{
+        breakpoint: 640,
+        options: {
+          chart: { height: 90, toolbar: { show: false } },
+        },
+      }],
       tooltip: {
         ...APEX_BASE.tooltip,
         y: {
