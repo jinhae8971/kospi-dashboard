@@ -54,7 +54,6 @@ function Range52W({ range52w }) {
         <span>고점 {fmtNumber(high, 0)}</span>
       </div>
       <div className="relative h-3 bg-bg-border rounded-full overflow-visible">
-        {/* 그라데이션 채움 */}
         <div
           className="h-full rounded-full"
           style={{
@@ -62,7 +61,6 @@ function Range52W({ range52w }) {
             background: 'linear-gradient(90deg, #00ff88 0%, #ffaa00 60%, #ff3366 100%)',
           }}
         />
-        {/* 현재가 마커 */}
         <div
           className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white border-2 border-accent-cyan shadow-lg"
           style={{ left: `calc(${pct}% - 5px)` }}
@@ -106,9 +104,9 @@ function IndBadge({ label, value, signal, unit = '' }) {
 }
 
 // ── 결정 히어로 카드 ─────────────────────────────────
-function DecisionHero({ decisionTree, metrics }) {
+function DecisionHero({ decisionTree }) {
   const { currentState, stateLabel, color, advice, cashRatio, description, confidence, indicators } = decisionTree
-  const isBuy = currentState.includes('BUY')
+  const isBuy  = currentState.includes('BUY')
   const isSell = currentState.includes('SELL')
   const borderColor = isBuy ? '#00ff88' : isSell ? '#ff3366' : '#ffaa00'
 
@@ -117,7 +115,6 @@ function DecisionHero({ decisionTree, metrics }) {
 
   return (
     <Card className="relative overflow-hidden" style={{ borderColor }}>
-      {/* 배경 글로우 */}
       <div
         className="absolute inset-0 opacity-5 pointer-events-none"
         style={{ background: `radial-gradient(ellipse at top left, ${color} 0%, transparent 70%)` }}
@@ -128,10 +125,7 @@ function DecisionHero({ decisionTree, metrics }) {
           <div>
             <SectionLabel>AI 포지션 결정</SectionLabel>
             <div className="flex items-center gap-2 flex-wrap">
-              <span
-                className="text-2xl font-bold font-mono tracking-wide"
-                style={{ color }}
-              >
+              <span className="text-2xl font-bold font-mono tracking-wide" style={{ color }}>
                 {stateLabel}
               </span>
               <span
@@ -198,50 +192,6 @@ function DecisionHero({ decisionTree, metrics }) {
   )
 }
 
-// ── 성과 지표 카드 ────────────────────────────────────
-function MetricPill({ label, value, color = 'text-slate-200', sub }) {
-  return (
-    <div className="flex flex-col items-center justify-center bg-bg-border/40 rounded-xl p-3 text-center">
-      <span className={`text-xl font-bold font-mono ${color}`}>{value}</span>
-      <span className="text-xs text-slate-500 mt-0.5 font-mono">{label}</span>
-      {sub && <span className="text-xs text-slate-600 font-mono mt-0.5">{sub}</span>}
-    </div>
-  )
-}
-
-function MetricsGrid({ metrics }) {
-  const { winRate, mdd, sharpeRatio, totalSignals, buySignals, profitableSignals,
-          avgReturn, maxReturn, minReturn } = metrics
-  return (
-    <Card>
-      <SectionLabel>퀀트 성과 지표</SectionLabel>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-        <MetricPill label="승률" value={`${(winRate * 100).toFixed(1)}%`} color="text-accent-green" />
-        <MetricPill label="Sharpe" value={sharpeRatio?.toFixed(2)} color="text-accent-cyan" />
-        <MetricPill label="MDD" value={`${(mdd * 100).toFixed(1)}%`} color={mdd === 0 ? 'text-accent-green' : 'text-accent-red'} />
-        <MetricPill label="총 신호" value={`${totalSignals}건`} color="text-accent-amber" sub={`매수 ${buySignals} / 수익 ${profitableSignals}`} />
-      </div>
-      {/* 수익률 바 */}
-      <div className="grid grid-cols-3 gap-2">
-        <div className="bg-bg-border/30 rounded-lg p-2 text-center">
-          <span className="block text-xs text-slate-500 font-mono mb-0.5">평균 수익</span>
-          <span className={`text-sm font-bold font-mono ${avgReturn >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
-            {fmtPct(avgReturn * 100)}
-          </span>
-        </div>
-        <div className="bg-bg-border/30 rounded-lg p-2 text-center">
-          <span className="block text-xs text-slate-500 font-mono mb-0.5">최대 수익</span>
-          <span className="text-sm font-bold font-mono text-accent-green">{fmtPct(maxReturn * 100)}</span>
-        </div>
-        <div className="bg-bg-border/30 rounded-lg p-2 text-center">
-          <span className="block text-xs text-slate-500 font-mono mb-0.5">최대 손실</span>
-          <span className="text-sm font-bold font-mono text-accent-red">{fmtPct(minReturn * 100)}</span>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
 // ── 지지/저항 레벨 ────────────────────────────────────
 function SupportResistance({ decisionTree, currentPrice }) {
   const resistance = decisionTree?.resistanceLevels || []
@@ -273,6 +223,134 @@ function SupportResistance({ decisionTree, currentPrice }) {
             </div>
           )
         })}
+      </div>
+    </Card>
+  )
+}
+
+// ── 코스피/코스닥 수급현황 ────────────────────────────
+function SupplyDemand({ supplyDemand }) {
+  // 수급 데이터 없을 때 (첫 배포 직후 등)
+  if (!supplyDemand || Object.keys(supplyDemand).length === 0) {
+    return (
+      <Card>
+        <SectionLabel>코스피 · 코스닥 수급현황</SectionLabel>
+        <p className="text-xs text-slate-600 font-mono text-center py-6">
+          수급 데이터 수집 중 — 다음 정기 업데이트(평일 18:00 KST) 후 반영됩니다
+        </p>
+      </Card>
+    )
+  }
+
+  // 억원 단위 포맷
+  const fmtAmt = (val) => {
+    if (val == null) return '-'
+    const abs = Math.abs(val)
+    const sign = val >= 0 ? '+' : '-'
+    if (abs >= 1_000_000_000_000) return `${sign}${(abs / 1_000_000_000_000).toFixed(1)}조`
+    if (abs >= 100_000_000)       return `${sign}${(abs / 100_000_000).toFixed(0)}억`
+    if (abs >= 10_000)             return `${sign}${(abs / 10_000).toFixed(0)}만`
+    return `${sign}${abs.toLocaleString()}`
+  }
+
+  const investors = [
+    { key: 'foreign',     label: '외국인', icon: '🌏' },
+    { key: 'institution', label: '기관',   icon: '🏛' },
+    { key: 'individual',  label: '개인',   icon: '👤' },
+  ]
+
+  const MarketPanel = ({ marketKey, label }) => {
+    const mdata = supplyDemand[marketKey]
+    if (!mdata) return (
+      <div className="flex items-center justify-center h-24">
+        <p className="text-xs text-slate-600 font-mono">데이터 없음</p>
+      </div>
+    )
+
+    const { latest, series = [], lastDate } = mdata
+
+    return (
+      <div>
+        {/* 마켓 헤더 */}
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm text-slate-300 font-mono font-bold">{label}</p>
+          <p className="text-xs text-slate-600 font-mono">{lastDate} 기준</p>
+        </div>
+
+        {/* 투자자별 행 */}
+        <div className="space-y-3">
+          {investors.map(({ key, label: iLabel, icon }) => {
+            const val   = latest?.[key] ?? 0
+            const isPos = val >= 0
+            const clr   = isPos ? '#00ff88' : '#ff3366'
+            const txtCls = isPos ? 'text-accent-green' : 'text-accent-red'
+
+            // 스파크바: 최근 15 거래일
+            const sparkVals = series.slice(-15).map(d => d[key] ?? 0)
+            const maxAbs    = Math.max(...sparkVals.map(Math.abs), 1)
+
+            return (
+              <div key={key}>
+                {/* 레이블 + 금액 */}
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-slate-400 font-mono">{icon} {iLabel}</span>
+                  <span className={`text-sm font-bold font-mono ${txtCls}`}>{fmtAmt(val)}</span>
+                </div>
+                {/* 스파크 바차트 */}
+                <div className="flex items-end gap-px" style={{ height: '20px' }}>
+                  {sparkVals.map((v, i) => {
+                    const barH = Math.max(2, (Math.abs(v) / maxAbs) * 18)
+                    const barClr = v >= 0 ? '#00ff88' : '#ff3366'
+                    const isLast = i === sparkVals.length - 1
+                    return (
+                      <div
+                        key={i}
+                        className="flex-1 rounded-sm"
+                        style={{
+                          height: `${barH}px`,
+                          background: barClr,
+                          opacity: isLast ? 1 : 0.45,
+                          alignSelf: 'flex-end',
+                          boxShadow: isLast ? `0 0 4px ${barClr}` : 'none',
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* 오늘 총 합계 요약 */}
+        {latest && (
+          <div className="mt-3 pt-3 border-t border-bg-border">
+            <div className="flex justify-between text-xs font-mono">
+              {investors.map(({ key, label: iLabel }) => {
+                const v = latest[key] ?? 0
+                return (
+                  <div key={key} className="text-center">
+                    <span className="block text-slate-500">{iLabel}</span>
+                    <span className={`font-bold ${v >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                      {fmtAmt(v)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <Card>
+      <SectionLabel>코스피 · 코스닥 수급현황 (투자자별 순매수)</SectionLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <MarketPanel marketKey="kospi"  label="🇰🇷 KOSPI" />
+        <div className="hidden sm:block border-l border-bg-border" />
+        <MarketPanel marketKey="kosdaq" label="📈 KOSDAQ" />
       </div>
     </Card>
   )
@@ -321,22 +399,21 @@ function CorrelationInfo({ correlations, comparison }) {
   })
 
   const corrColor = (v) => {
-    if (v > 0.5) return 'text-accent-green'
-    if (v > 0.2) return 'text-accent-amber'
+    if (v > 0.5)  return 'text-accent-green'
+    if (v > 0.2)  return 'text-accent-amber'
     if (v < -0.2) return 'text-accent-red'
     return 'text-slate-400'
   }
   const corrBar = (v) => {
-    const pct = ((v + 1) / 2) * 100
+    const pct   = ((v + 1) / 2) * 100
     const color = v > 0.2 ? '#00ff88' : v < -0.2 ? '#ff3366' : '#ffaa00'
     return { pct, color }
   }
 
-  // comparison 수익률
   const compReturn = []
   if (comparison?.kospi_return != null) compReturn.push({ label: 'KOSPI', val: comparison.kospi_return, color: 'text-accent-cyan' })
-  if (comparison?.qqq_return != null)   compReturn.push({ label: 'QQQ',   val: comparison.qqq_return,   color: 'text-accent-amber' })
-  if (comparison?.sox_return != null)   compReturn.push({ label: 'SOX',   val: comparison.sox_return,   color: 'text-accent-purple' })
+  if (comparison?.qqq_return   != null) compReturn.push({ label: 'QQQ',   val: comparison.qqq_return,   color: 'text-accent-amber' })
+  if (comparison?.sox_return   != null) compReturn.push({ label: 'SOX',   val: comparison.sox_return,   color: 'text-accent-purple' })
 
   return (
     <Card>
@@ -355,9 +432,7 @@ function CorrelationInfo({ correlations, comparison }) {
                     <span className={corrColor(p.val)}>{p.val >= 0 ? '+' : ''}{p.val.toFixed(3)}</span>
                   </div>
                   <div className="relative h-1.5 bg-bg-border rounded-full">
-                    {/* 중앙 마커 */}
                     <div className="absolute left-1/2 top-0 h-full w-px bg-slate-600" />
-                    {/* 바 */}
                     <div
                       className="absolute top-0 h-full rounded-full"
                       style={{
@@ -407,7 +482,7 @@ function CorrelationInfo({ correlations, comparison }) {
 }
 
 // ── 헤더 ─────────────────────────────────────────────
-function Header({ ohlcv, metadata, range52w }) {
+function Header({ ohlcv, metadata }) {
   const latest = ohlcv?.[ohlcv.length - 1]
   const prev   = ohlcv?.[ohlcv.length - 2]
   const change    = latest && prev ? latest.close - prev.close : null
@@ -424,7 +499,7 @@ function Header({ ohlcv, metadata, range52w }) {
           </div>
           <div>
             <h1 className="text-sm font-bold text-slate-200 leading-none font-mono">KOSPI Dashboard</h1>
-            <p className="text-xs text-slate-500 font-mono">퀀트 전략 인사이트</p>
+            <p className="text-xs text-slate-500 font-mono">시장 인사이트 · 수급현황</p>
           </div>
         </div>
 
@@ -459,19 +534,19 @@ export default function App() {
 
   if (loading || error) return <LoadingScreen error={error} />
 
-  const { metadata, ohlcv, signals, metrics, correlations, comparison, decisionTree, range52w } = data
+  const { metadata, ohlcv, signals, correlations, comparison, decisionTree, range52w, supplyDemand } = data
   const latestPrice = ohlcv?.[ohlcv.length - 1]?.close
 
   return (
     <div className="min-h-screen bg-bg-primary text-slate-200 animate-fade-in">
-      <Header ohlcv={ohlcv} metadata={metadata} range52w={range52w} />
+      <Header ohlcv={ohlcv} metadata={metadata} />
 
       <main className="px-4 pb-10 space-y-3 max-w-[1400px] mx-auto">
 
         {/* ① 결정 카드 + 지지저항 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           <div className="lg:col-span-2">
-            <DecisionHero decisionTree={decisionTree} metrics={metrics} />
+            <DecisionHero decisionTree={decisionTree} />
           </div>
           <SupportResistance decisionTree={decisionTree} currentPrice={latestPrice} />
         </div>
@@ -479,8 +554,8 @@ export default function App() {
         {/* ② 52주 레인지 */}
         <Range52W range52w={range52w} />
 
-        {/* ③ 성과 지표 */}
-        <MetricsGrid metrics={metrics} />
+        {/* ③ 코스피/코스닥 수급현황 */}
+        <SupplyDemand supplyDemand={supplyDemand} />
 
         {/* ④ 매매 신호 + 상관관계 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
