@@ -337,66 +337,114 @@ def compute_correlations(kospi_df, qqq_df, sox_df, window=60, start_1y=None):
 
 
 # ---------------------------------------------------------------------------
-# 수급현황: 투자자별 순매수 (pykrx)
+# 수급현황: 투자자별 순매수 (NAVER Finance 스크래핑 — 글로벌 IP 호환)
 # ---------------------------------------------------------------------------
 
 def fetch_supply_demand():
-    """코스피/코스닥 투자자별 수급 데이터 수집 (pykrx 사용)"""
-    try:
-        from pykrx import stock as krx_stock
-    except ImportError:
-        print("  [WARNING] pykrx not installed — 수급 데이터 생략")
-        return {}
+    """코스피/코스닥 투자자별 순매수 데이터 수집
+    KRX API는 국내 IP 제한이 있으므로 NAVER Finance HTML을 사용합니다.
+    단위: 억원 (NAVER 기준)
+    """
+    import re as _re
+    import time as _time
+    import requests as _req
+
+    session = _req.Session()
+    session.headers.update({
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "ko-KR,ko;q=0.9",
+        "Referer": "https://finance.naver.com/sise/sise_trans_style.naver",
+    })
+
+    today    = datetime.now()
+    cutoff   = today - timedelta(days=400)          # 1년 + 버퍼
+    bizdate  = today.strftime("%Y%m%d")
+
+    # 날짜 + 10개 컬럼 (개인, 외국인, 기관계, 금융투자, 보험, 투신, 은행, 기타금융, 연기금, 기타법인)
+    ROW_PAT = (
+        r'<td class="date2">(\d{2}\.\d{2}\.\d{2})</td>'
+        + r'\s*<td[^>]*>([\d,\-]+)</td>' * 10
+    )
+
+    def _parse(s: str) -> int:
+        s = s.replace(",", "").strip()
+        try:
+            return int(s)
+        except ValueError:
+            return 0
 
     result = {}
-    end_dt = datetime.now()
-    start_dt = end_dt - timedelta(days=400)  # 1년치 + 여유 → 약 250 거래일
-    fromdate = start_dt.strftime("%Y%m%d")
-    todate   = end_dt.strftime("%Y%m%d")
+    market_map = [
+        ("kospi",  "01"),   # sosok=01 → 코스피
+        ("kosdaq", "02"),   # sosok=02 → 코스닥
+    ]
 
-    for market_name, market_key in [("kospi", "KOSPI"), ("kosdaq", "KOSDAQ")]:
+    for market_name, sosok in market_map:
+        series = []
         try:
-            # get_market_trading_value_by_date: 날짜별 투자자 순매수 거래대금
-            # 컬럼: 기관합계, 기타법인, 개인, 외국인합계, 전체
-            df = krx_stock.get_market_trading_value_by_date(
-                fromdate, todate, market_key, on="순매수"
-            )
+            for page in range(1, 35):           # 페이지당 10행 × 34 = 340일 최대
+                url = (
+                    "https://finance.naver.com/sise/investorDealTrendDay.naver"
+                    f"?bizdate={bizdate}&sosok={sosok}&page={page}"
+                )
+                resp = session.get(url, timeout=20)
+                if resp.status_code != 200:
+                    print(f"  [{market_name}] p{page}: HTTP {resp.status_code}")
+                    break
 
-            if df is None or df.empty:
-                print(f"  Supply/Demand {market_key}: empty DataFrame")
-                continue
+                content = resp.content.decode("euc-kr", errors="replace")
+                matches = _re.findall(ROW_PAT, content)
+                if not matches:
+                    break
 
-            # 날짜 인덱스 정규화
-            if not isinstance(df.index, pd.DatetimeIndex):
-                df.index = pd.to_datetime(df.index)
+                stop = False
+                for m in matches:
+                    try:
+                        dt = datetime.strptime("20" + m[0], "%Y.%m.%d")
+                    except ValueError:
+                        continue
+                    if dt < cutoff:
+                        stop = True
+                        break
 
-            series = []
-            for date, row in df.iterrows():
-                foreign     = int(row.get("외국인합계", 0)) if pd.notna(row.get("외국인합계", 0)) else 0
-                institution = int(row.get("기관합계",   0)) if pd.notna(row.get("기관합계",   0)) else 0
-                individual  = int(row.get("개인",       0)) if pd.notna(row.get("개인",       0)) else 0
-                # 모두 0인 날(휴장일) 제외
-                if foreign == 0 and institution == 0 and individual == 0:
-                    continue
-                series.append({
-                    "date":        date.strftime("%Y-%m-%d"),
-                    "foreign":     foreign,
-                    "institution": institution,
-                    "individual":  individual,
-                })
+                    series.append({
+                        "date":        dt.strftime("%Y-%m-%d"),
+                        "individual":  _parse(m[1]),   # 개인
+                        "foreign":     _parse(m[2]),   # 외국인
+                        "institution": _parse(m[3]),   # 기관계
+                    })
 
-            if series:
-                result[market_name] = {
-                    "lastDate": series[-1]["date"],
-                    "latest": {k: series[-1][k] for k in ["foreign", "institution", "individual"]},
-                    "series": series   # 전체 (약 250 거래일)
-                }
-                print(f"  Supply/Demand {market_key}: {len(series)} days, latest={series[-1]['date']}")
-            else:
-                print(f"  Supply/Demand {market_key}: no valid rows")
+                if stop:
+                    break
+                _time.sleep(0.25)           # 과도한 요청 방지
 
         except Exception as exc:
-            print(f"  Supply/Demand {market_key}: error → {exc}")
+            print(f"  Supply/Demand {market_name}: error → {exc}")
+            continue
+
+        if not series:
+            print(f"  Supply/Demand {market_name}: no data collected")
+            continue
+
+        # 날짜 오름차순 정렬
+        series.sort(key=lambda x: x["date"])
+        result[market_name] = {
+            "lastDate": series[-1]["date"],
+            "latest": {k: series[-1][k] for k in ["foreign", "institution", "individual"]},
+            "series": series,
+            "unit": "억원",
+        }
+        latest = series[-1]
+        print(
+            f"  Supply/Demand {market_name}: {len(series)} days, "
+            f"latest={latest['date']}, "
+            f"외국인={latest['foreign']:,} / 기관={latest['institution']:,} / "
+            f"개인={latest['individual']:,} 억원"
+        )
 
     return result
 
