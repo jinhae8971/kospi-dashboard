@@ -354,51 +354,42 @@ def fetch_supply_demand():
     fromdate = start_dt.strftime("%Y%m%d")
     todate   = end_dt.strftime("%Y%m%d")
 
-    # 투자자 컬럼명 후보 (pykrx 버전 차이 대응)
-    COL_MAP = {
-        "foreign":     ["외국인합계", "외국인", "외국인 합계"],
-        "institution": ["기관합계", "기관", "기관 합계"],
-        "individual":  ["개인"],
-    }
-
     for market_name, market_key in [("kospi", "KOSPI"), ("kosdaq", "KOSDAQ")]:
         try:
-            df = krx_stock.get_market_net_purchases_of_equities_by_investor(
-                fromdate, todate, market_key
+            # get_market_trading_value_by_date: 날짜별 투자자 순매수 거래대금
+            # 컬럼: 기관합계, 기타법인, 개인, 외국인합계, 전체
+            df = krx_stock.get_market_trading_value_by_date(
+                fromdate, todate, market_key, on="순매수"
             )
 
             if df is None or df.empty:
                 print(f"  Supply/Demand {market_key}: empty DataFrame")
                 continue
 
-            # --- 날짜 인덱스 정규화 ---
+            # 날짜 인덱스 정규화
             if not isinstance(df.index, pd.DatetimeIndex):
                 df.index = pd.to_datetime(df.index)
 
             series = []
             for date, row in df.iterrows():
-                entry = {"date": date.strftime("%Y-%m-%d")}
-                for key, candidates in COL_MAP.items():
-                    val = 0
-                    for col in candidates:
-                        if col in (row.index if hasattr(row, 'index') else []):
-                            v = row[col]
-                            val = int(v) if pd.notna(v) else 0
-                            break
-                    entry[key] = val
-                series.append(entry)
-
-            # 거래 있는 날만 남기기
-            series = [
-                e for e in series
-                if any(e.get(k, 0) != 0 for k in ["foreign", "institution", "individual"])
-            ]
+                foreign     = int(row.get("외국인합계", 0)) if pd.notna(row.get("외국인합계", 0)) else 0
+                institution = int(row.get("기관합계",   0)) if pd.notna(row.get("기관합계",   0)) else 0
+                individual  = int(row.get("개인",       0)) if pd.notna(row.get("개인",       0)) else 0
+                # 모두 0인 날(휴장일) 제외
+                if foreign == 0 and institution == 0 and individual == 0:
+                    continue
+                series.append({
+                    "date":        date.strftime("%Y-%m-%d"),
+                    "foreign":     foreign,
+                    "institution": institution,
+                    "individual":  individual,
+                })
 
             if series:
                 result[market_name] = {
                     "lastDate": series[-1]["date"],
-                    "latest": {k: series[-1].get(k, 0) for k in ["foreign", "institution", "individual"]},
-                    "series": series          # 전체 (약 250 거래일)
+                    "latest": {k: series[-1][k] for k in ["foreign", "institution", "individual"]},
+                    "series": series   # 전체 (약 250 거래일)
                 }
                 print(f"  Supply/Demand {market_key}: {len(series)} days, latest={series[-1]['date']}")
             else:
