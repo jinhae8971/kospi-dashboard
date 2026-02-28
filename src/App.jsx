@@ -319,51 +319,17 @@ function InvestorLineChart({ series }) {
 
 // ── 코스피/코스닥 수급현황 ────────────────────────────
 function SupplyDemand({ supplyDemand }) {
-  if (!supplyDemand || Object.keys(supplyDemand).length === 0) {
-    return (
-      <Card>
-        <SectionLabel>코스피 · 코스닥 수급현황</SectionLabel>
-        <p className="text-xs text-slate-600 font-mono text-center py-6">
-          수급 데이터 수집 중 — 다음 정기 업데이트(평일 18:00 KST) 후 반영됩니다
-        </p>
-      </Card>
-    )
-  }
-
   const MarketPanel = ({ marketKey, label }) => {
-    const mdata = supplyDemand[marketKey]
-    if (!mdata) return (
-      <div className="flex items-center justify-center h-24">
-        <p className="text-xs text-slate-600 font-mono">데이터 없음</p>
-      </div>
-    )
-    const { latest, series = [], lastDate } = mdata
+    const mdata = supplyDemand?.[marketKey]
+    const series = mdata?.series ?? []
+    const lastDate = mdata?.lastDate ?? ''
 
     return (
       <div>
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-slate-300 font-mono font-bold">{label}</p>
-          <p className="text-xs text-slate-600 font-mono">{lastDate} 기준</p>
-        </div>
-
-        {/* 당일 순매수 요약 */}
-        <div className="flex gap-3 mb-2">
-          {INVESTOR_CFG.map(({ key, label: lbl, color }) => {
-            const v = latest?.[key] ?? 0
-            return (
-              <div key={key} className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                <span className="text-xs text-slate-500 font-mono">{lbl}</span>
-                <span
-                  className="text-xs font-bold font-mono"
-                  style={{ color: v >= 0 ? '#00ff88' : '#ff3366' }}
-                >
-                  {fmtAmt(v)}
-                </span>
-              </div>
-            )
-          })}
+          {lastDate && <p className="text-xs text-slate-600 font-mono">{lastDate} 기준</p>}
         </div>
 
         {/* 선형 차트 */}
