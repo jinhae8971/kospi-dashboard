@@ -228,88 +228,126 @@ function SupportResistance({ decisionTree, currentPrice }) {
   )
 }
 
-// ── 수급 선형 차트 (SVG) ─────────────────────────────
+// ── 수급 주간 막대 차트 (SVG) ────────────────────────
 const INVESTOR_CFG = [
   { key: 'foreign',     label: '외국인', color: '#00d4ff' },
   { key: 'institution', label: '기관',   color: '#ffaa00' },
   { key: 'individual',  label: '개인',   color: '#94a3b8' },
 ]
 
-function fmtAmt(val) {
-  if (val == null) return '-'
-  const abs  = Math.abs(val)
-  const sign = val >= 0 ? '+' : '-'
-  if (abs >= 1_000_000_000_000) return `${sign}${(abs / 1_000_000_000_000).toFixed(1)}조`
-  if (abs >= 100_000_000)       return `${sign}${(abs / 100_000_000).toFixed(0)}억`
-  if (abs >= 10_000)            return `${sign}${(abs / 10_000).toFixed(0)}만`
-  return `${sign}${abs.toLocaleString()}`
+// Y축 레이블: 값 단위는 억원
+function fmtAxisAmt(v) {
+  if (v === 0) return '0'
+  const abs  = Math.abs(v)
+  const sign = v >= 0 ? '+' : '-'
+  if (abs >= 10_000) return `${sign}${(abs / 10_000).toFixed(0)}조`
+  if (abs >= 1_000)  return `${sign}${(abs / 1_000).toFixed(0)}천`
+  return `${sign}${abs}`
 }
 
-function InvestorLineChart({ series }) {
-  if (!series || series.length < 2) return (
+function InvestorWeeklyBarChart({ series }) {
+  if (!series || series.length < 5) return (
     <div className="flex items-center justify-center h-20 text-xs text-slate-600 font-mono">
       데이터 부족
     </div>
   )
 
-  const W = 400, H = 90
-  const PAD = { t: 8, r: 4, b: 16, l: 4 }
-  const w = W - PAD.l - PAD.r
-  const h = H - PAD.t - PAD.b
+  // 월요일 기준 주간 집계
+  const weekMap = {}
+  series.forEach(d => {
+    const date = new Date(d.date)
+    const dow  = date.getDay()                 // 0=일, 1=월...
+    const diff = dow === 0 ? -6 : 1 - dow      // 해당 주 월요일로 이동
+    const mon  = new Date(date)
+    mon.setDate(date.getDate() + diff)
+    const key = mon.toISOString().slice(0, 10) // "YYYY-MM-DD"
+    if (!weekMap[key]) weekMap[key] = { key, foreign: 0, institution: 0, individual: 0 }
+    weekMap[key].foreign     += d.foreign     ?? 0
+    weekMap[key].institution += d.institution ?? 0
+    weekMap[key].individual  += d.individual  ?? 0
+  })
 
-  const allVals = series.flatMap(d => INVESTOR_CFG.map(c => d[c.key] ?? 0))
-  const minV = Math.min(...allVals, 0)
-  const maxV = Math.max(...allVals, 0)
+  const weeks = Object.values(weekMap).sort((a, b) => a.key.localeCompare(b.key))
+  if (weeks.length < 2) return null
+
+  const W = 700, H = 120
+  const PAD = { t: 10, r: 8, b: 22, l: 44 }
+  const uw  = W - PAD.l - PAD.r
+  const uh  = H - PAD.t - PAD.b
+
+  const allVals = weeks.flatMap(wk => INVESTOR_CFG.map(c => wk[c.key]))
+  const minV  = Math.min(...allVals, 0)
+  const maxV  = Math.max(...allVals, 0)
   const range = maxV - minV || 1
 
-  const xS = (i) => PAD.l + (i / (series.length - 1)) * w
-  const yS = (v) => PAD.t + ((maxV - v) / range) * h
+  const yS    = v => PAD.t + ((maxV - v) / range) * uh
   const zeroY = yS(0)
 
-  // X축 날짜 레이블: 3개월 간격
+  const slotW   = uw / weeks.length
+  const BAR_GAP = 0.7
+  const barW    = Math.max(1.2, (slotW * 0.86 - BAR_GAP * 2) / 3)
+
+  // Y 눈금 (5단계)
+  const yTicks = []
+  for (let t = 0; t <= 4; t++) {
+    const v = minV + (range / 4) * t
+    yTicks.push({ v, y: yS(v) })
+  }
+
+  // X 레이블 — 월이 바뀔 때 1회
   const xLabels = []
-  let lastMonth = null
-  series.forEach((d, i) => {
-    const m = d.date?.slice(0, 7)
-    if (m && m !== lastMonth && i % Math.max(1, Math.floor(series.length / 5)) === 0) {
-      xLabels.push({ i, label: m.slice(2) }) // "YY-MM"
-      lastMonth = m
+  let lastMon = null
+  weeks.forEach((wk, i) => {
+    const m = wk.key.slice(0, 7)
+    if (m !== lastMon) {
+      xLabels.push({ i, label: m.slice(5) + '월' })
+      lastMon = m
     }
   })
 
+  // 3개 막대 X 오프셋 (중앙 정렬)
+  const offsets = [-(barW + BAR_GAP), 0, barW + BAR_GAP]
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
-      {/* 제로라인 */}
-      <line
-        x1={PAD.l} y1={zeroY} x2={W - PAD.r} y2={zeroY}
-        stroke="#334155" strokeWidth="1" strokeDasharray="4,3"
-      />
-      {/* 각 투자자 라인 */}
-      {INVESTOR_CFG.map(({ key, color }) => {
-        const pts = series.map((d, i) => `${xS(i)},${yS(d[key] ?? 0)}`).join(' ')
-        return (
-          <polyline
-            key={key} points={pts}
-            fill="none" stroke={color}
-            strokeWidth="1.5" strokeLinejoin="round" opacity="0.9"
+      {/* Y 그리드 & 레이블 */}
+      {yTicks.map((t, i) => (
+        <g key={i}>
+          <line
+            x1={PAD.l} y1={t.y} x2={W - PAD.r} y2={t.y}
+            stroke={t.v === 0 ? '#475569' : '#1e293b'}
+            strokeWidth={t.v === 0 ? 1 : 0.5}
           />
-        )
+          <text
+            x={PAD.l - 3} y={t.y + 3}
+            fontSize="6.5" fill="#475569" textAnchor="end" fontFamily="monospace"
+          >{fmtAxisAmt(t.v)}</text>
+        </g>
+      ))}
+
+      {/* 투자자별 주간 막대 */}
+      {weeks.map((wk, wi) => {
+        const cx = PAD.l + (wi + 0.5) * slotW
+        return INVESTOR_CFG.map(({ key, color }, ki) => {
+          const val = wk[key]
+          const top = val >= 0 ? yS(val) : zeroY
+          const bh  = Math.max(Math.abs(yS(val) - zeroY), 0.5)
+          const x   = cx + offsets[ki] - barW / 2
+          return (
+            <rect
+              key={`${wi}-${ki}`}
+              x={x} y={top} width={barW} height={bh}
+              fill={color} opacity="0.82" rx="0.4"
+            />
+          )
+        })
       })}
-      {/* 최신 값 점 */}
-      {INVESTOR_CFG.map(({ key, color }) => {
-        const last = series[series.length - 1]
-        return (
-          <circle
-            key={key}
-            cx={xS(series.length - 1)} cy={yS(last[key] ?? 0)}
-            r="2.5" fill={color}
-          />
-        )
-      })}
-      {/* X축 날짜 */}
+
+      {/* X 월 레이블 */}
       {xLabels.map(({ i, label }) => (
         <text
-          key={i} x={xS(i)} y={H - 2}
+          key={i}
+          x={PAD.l + (i + 0.5) * slotW} y={H - 5}
           fontSize="7" fill="#475569" textAnchor="middle" fontFamily="monospace"
         >{label}</text>
       ))}
@@ -320,21 +358,21 @@ function InvestorLineChart({ series }) {
 // ── 코스피/코스닥 수급현황 ────────────────────────────
 function SupplyDemand({ supplyDemand }) {
   const MarketPanel = ({ marketKey, label }) => {
-    const mdata = supplyDemand?.[marketKey]
-    const series = mdata?.series ?? []
+    const mdata    = supplyDemand?.[marketKey]
+    const series   = mdata?.series   ?? []
     const lastDate = mdata?.lastDate ?? ''
 
     return (
       <div>
-        {/* 헤더 */}
+        {/* 패널 헤더 */}
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-slate-300 font-mono font-bold">{label}</p>
           {lastDate && <p className="text-xs text-slate-600 font-mono">{lastDate} 기준</p>}
         </div>
 
-        {/* 선형 차트 */}
+        {/* 주간 막대 차트 */}
         <div className="bg-bg-border/20 rounded-lg px-2 pt-1">
-          <InvestorLineChart series={series} />
+          <InvestorWeeklyBarChart series={series} />
         </div>
       </div>
     )
@@ -342,19 +380,20 @@ function SupplyDemand({ supplyDemand }) {
 
   return (
     <Card>
-      <SectionLabel>코스피 · 코스닥 수급현황 — 투자자별 순매수 (1년)</SectionLabel>
+      <SectionLabel>코스피 · 코스닥 수급현황 — 투자자별 주간 순매수 (단위: 억원)</SectionLabel>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <MarketPanel marketKey="kospi"  label="🇰🇷 KOSPI" />
         <div className="hidden sm:block border-l border-bg-border" />
         <MarketPanel marketKey="kosdaq" label="📈 KOSDAQ" />
       </div>
       {/* 범례 */}
-      <div className="flex gap-4 justify-center mt-3 pt-3 border-t border-bg-border">
+      <div className="flex gap-5 justify-center mt-3 pt-3 border-t border-bg-border">
         {INVESTOR_CFG.map(({ key, label, color }) => (
           <div key={key} className="flex items-center gap-1.5">
-            <svg width="18" height="4">
-              <line x1="0" y1="2" x2="18" y2="2" stroke={color} strokeWidth="1.5" />
-            </svg>
+            <span
+              className="inline-block w-3 h-3 rounded-sm"
+              style={{ background: color, opacity: 0.85 }}
+            />
             <span className="text-xs font-mono" style={{ color }}>{label}</span>
           </div>
         ))}
