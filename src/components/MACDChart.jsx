@@ -65,6 +65,7 @@ export default function MACDChart({ ohlcv, indicators }) {
           },
         },
       },
+      dataLabels: { enabled: false },
       annotations: {
         yaxis: [{
           y: 0,

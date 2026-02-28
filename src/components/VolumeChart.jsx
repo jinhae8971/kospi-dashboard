@@ -53,6 +53,7 @@ export default function VolumeChart({ ohlcv, indicators }) {
           },
         },
       },
+      dataLabels: { enabled: false },
       yaxis: {
         labels: {
           style: { colors: '#64748b', fontSize: '9px' },
